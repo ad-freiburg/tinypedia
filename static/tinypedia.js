@@ -26,7 +26,7 @@ function sentenceToHTML(sentence) {
       }));
       textRemaining = textRemaining.substring(end)+" ";
     }
-    sentHTML.append(document.createTextNode(textRemaining))
+    sentHTML.append(document.createTextNode(textRemaining+" "))
   } else {
     sentHTML.text(textRemaining);
   }
@@ -95,6 +95,9 @@ function loadArticle(title) {
 
 $(document).ready(function(){
   window.addEventListener('hashchange', locationHashChanged, false);
-  let title = 'Germany';
+  var title = decodeURIComponent(location.hash.substring(1));
+  if (title === null || title === ''){
+    title = 'Alan Turing';
+  }
   loadArticle(title);
 })
