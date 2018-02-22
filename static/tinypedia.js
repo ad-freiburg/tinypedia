@@ -14,14 +14,14 @@ function sentenceToHTML(sentence) {
   let links = sentence.links;
   if (links) {
     let linkSplits = [];
-    for (let i = 0; i < links.length; i++) {
+    for (let i = 0; i < links.length && textRemaining != null; i++) {
       let link = links[i];
       let start = textRemaining.indexOf(link.text);
       let end = start + link.text.length;
 
       sentHTML.append(document.createTextNode(textRemaining.substring(0, start)));
       sentHTML.append($('<a />', {
-        href: "/?q="+encodeURIComponent(link.page),
+        href: "#"+encodeURIComponent(link.page),
         text: link.text
       }));
       textRemaining = textRemaining.substring(end)+" ";
@@ -48,7 +48,6 @@ function sectionsToHTML(sections) {
   let secsHTML = $('<div id="sections">');
   for (let i = 0; i < sections.length; i++) {
     section = sections[i];
-    console.log('section: '+section.title)
     if (section.title != "") {
       secsHTML.append($('<h'+(section.depth+1)+'>').text(section.title));
     }
@@ -67,23 +66,35 @@ function astToHTML(title, ast) {
     );
 }
 
-$(document).ready(function(){
-  let title = getParameterByName('q')
+function locationHashChanged() {
+  var title = decodeURIComponent(location.hash.substring(1));
+  console.log('Location Hash Change:'+title);
+  loadArticle(title);
+}
+
+function loadArticle(title) {
   $.get('wiki/'+encodeURIComponent(title), function(markup){
     ast = wtf.parse(markup)
     /**
      * Handle page redirect's e.g. Moody's ⇒ Moody's Investors Service
      * **/
-    if (ast.type == 'redirect') {
+    if (ast.type === 'redirect') {
       console.log('redirect');
-      window.location.replace('?q='+encodeURIComponent(ast.redirect));
+      history.replaceState(undefined, undefined, '#'+encodeURIComponent(ast.redirect));
+      loadArticle(ast.redirect);
       return;
     }
     $('#content').html(
       astToHTML(title, ast)
     );
-    $('#debug').html(
+    /*$('#debug').html(
       JSON.stringify(ast, null, 2)
-    );
+    );*/
   });
+}
+
+$(document).ready(function(){
+  window.addEventListener('hashchange', locationHashChanged, false);
+  let title = 'Germany';
+  loadArticle(title);
 })

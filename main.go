@@ -53,7 +53,7 @@ func readBzip2StreamOffsetAndId(indexFile *os.File) (map[string]OffsetAndId, err
 	return offsetMap, nil
 }
 
-func extractArticleMediawiki(bz2MultiStream *os.File, offset int64, id string) (content string, err error) {
+func extractArticleMediawiki(bz2MultiStreamPath string, offset int64, id string) (content string, err error) {
 	const (
 		OUTSIDE       = iota
 		IN_PAGE       = iota
@@ -62,6 +62,11 @@ func extractArticleMediawiki(bz2MultiStream *os.File, offset int64, id string) (
 		FOUND_ID      = iota
 		IN_MATCH_TEXT = iota
 	)
+	bz2MultiStream, err := os.Open(bz2MultiStreamPath)
+	if err != nil {
+		return "", err
+	}
+	defer bz2MultiStream.Close()
 	bz2MultiStream.Seek(offset, 0)
 	contentStream := bzip2.NewReader(bz2MultiStream)
 	dexml := xml.NewDecoder(contentStream)
@@ -123,12 +128,12 @@ func extractArticleMediawiki(bz2MultiStream *os.File, offset int64, id string) (
 }
 
 type TinyWikiHandler struct {
-	offsetMap   map[string]OffsetAndId
-	contentFile *os.File
+	offsetMap       map[string]OffsetAndId
+	contentFilePath string
 }
 
-func NewTinyWikiHandler(offsetMap map[string]OffsetAndId, contentFile *os.File) *TinyWikiHandler {
-	return &TinyWikiHandler{offsetMap, contentFile}
+func NewTinyWikiHandler(offsetMap map[string]OffsetAndId, contentFilePath string) *TinyWikiHandler {
+	return &TinyWikiHandler{offsetMap, contentFilePath}
 }
 
 func (h *TinyWikiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +145,7 @@ func (h *TinyWikiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Found offset:", offsetAndId.Offset, "and id:", offsetAndId.Id)
-	content, err := extractArticleMediawiki(h.contentFile, offsetAndId.Offset, offsetAndId.Id)
+	content, err := extractArticleMediawiki(h.contentFilePath, offsetAndId.Offset, offsetAndId.Id)
 	if err != nil {
 		log.Println(err)
 		return
@@ -159,13 +164,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	contentFile, err := os.Open(contentFilePath)
-	defer contentFile.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	wikiHandler := NewTinyWikiHandler(offsetMap, contentFile)
+	wikiHandler := NewTinyWikiHandler(offsetMap, contentFilePath)
 	http.Handle("/wiki/", http.StripPrefix("/wiki/", wikiHandler))
 	http.Handle("/", http.FileServer(http.Dir("static")))
 	log.Fatal(http.ListenAndServe(":8080", nil))
