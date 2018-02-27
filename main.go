@@ -28,7 +28,7 @@ func init() {
 
 type OffsetAndId struct {
 	Offset int64
-	Id     string
+	Id     uint64
 }
 
 func readBzip2StreamOffsetAndId(indexFile *os.File) (map[string]OffsetAndId, error) {
@@ -38,13 +38,18 @@ func readBzip2StreamOffsetAndId(indexFile *os.File) (map[string]OffsetAndId, err
 	indexScanner := bufio.NewScanner(indexStream)
 	for indexScanner.Scan() {
 		splits := strings.SplitN(indexScanner.Text(), ":", 3)
-		offStr, id, currTitle := splits[0], splits[1], splits[2]
+		offStr, idStr, currTitle := splits[0], splits[1], splits[2]
 		offset, err := strconv.ParseInt(offStr, 10, 64)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		offsetMap[currTitle] = OffsetAndId{offset, strings.TrimSpace(id)}
+		id, err := strconv.ParseUint(idStr, 10, 64)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		offsetMap[currTitle] = OffsetAndId{offset, id}
 	}
 	if err := indexScanner.Err(); err != nil {
 		return offsetMap, err
@@ -53,7 +58,7 @@ func readBzip2StreamOffsetAndId(indexFile *os.File) (map[string]OffsetAndId, err
 	return offsetMap, nil
 }
 
-func extractArticleMediawiki(bz2MultiStreamPath string, offset int64, id string) (content string, err error) {
+func extractArticleMediawiki(bz2MultiStreamPath string, offId OffsetAndId) (content string, err error) {
 	const (
 		OUTSIDE       = iota
 		IN_PAGE       = iota
@@ -67,7 +72,7 @@ func extractArticleMediawiki(bz2MultiStreamPath string, offset int64, id string)
 		return "", err
 	}
 	defer bz2MultiStream.Close()
-	bz2MultiStream.Seek(offset, 0)
+	bz2MultiStream.Seek(offId.Offset, 0)
 	contentStream := bzip2.NewReader(bz2MultiStream)
 	dexml := xml.NewDecoder(contentStream)
 
@@ -107,8 +112,10 @@ func extractArticleMediawiki(bz2MultiStreamPath string, offset int64, id string)
 					tempData.Reset()
 					continue
 				}
-				currId := strings.TrimSpace(tempData.String())
-				if currId == id {
+				currId, err := strconv.ParseUint(tempData.String(), 10, 64)
+				if err != nil {
+					log.Println(err)
+				} else if currId == offId.Id {
 					state = FOUND_ID
 				}
 				tempData.Reset()
@@ -145,7 +152,7 @@ func (h *TinyWikiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Found offset:", offsetAndId.Offset, "and id:", offsetAndId.Id)
-	content, err := extractArticleMediawiki(h.contentFilePath, offsetAndId.Offset, offsetAndId.Id)
+	content, err := extractArticleMediawiki(h.contentFilePath, offsetAndId)
 	if err != nil {
 		log.Println(err)
 		return
